@@ -1,3 +1,7 @@
 CARLA/
 out/
 .ipynb_checkpoints/
+RedNet/
+data/
+ACNet/
+lib/models/

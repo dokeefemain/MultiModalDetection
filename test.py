@@ -1,47 +1,69 @@
-import carla
-import random
+#world.tick()
+image = image_queue.get()
+img = np.reshape(np.copy(image.raw_data), (image.height, image.width, 4))
+#actor_list = world.get_actors()
+# Get camera matrix
+world_2_camera = np.array(camera.get_transform().get_inverse_matrix())
+labs = []
+x_mins=[]
+y_mins=[]
+x_maxs=[]
+y_maxs=[]
+files = []
 
-# Connect to the client and retrieve the world object
-client = carla.Client('localhost', 2000)
-world = client.get_world()
+#actor_list = world.get_actors()
+actor_list = []
+for i in world.get_actors().filter('*vehicle*'):
+    actor_list.append(i)
+for i in world.get_actors().filter('*traffic*'):
+    actor_list.append(i)
+print(actor_list)
 
-spectator = world.get_spectator()
+for curr in actor_list:
+    if curr.id != vehicle.id:
+        bb = curr.bounding_box
+        dist = curr.get_transform().location.distance(vehicle.get_transform().location)
+        print(dist)
+        if dist < 50:
+            print("test")
+            forward_vec = vehicle.get_transform().get_forward_vector()
+            ray = curr.get_transform().location - vehicle.get_transform().location
 
-# Get the location and rotation of the spectator through its transform
-transform = spectator.get_transform()
+            if forward_vec.dot(ray) > 1:
+                lab = ""
+                lab = curr.type_id
+                p1 = get_image_point(bb.location, K,world_2_camera)
+                verts = [v for v in bb.get_world_vertices(curr.get_transform())]
+                x_max = -10000
+                x_min = 10000
+                y_max = -10000
+                y_min = 10000
+                for vert in verts:
+                    p = get_image_point(vert, K, world_2_camera)
+                    print(p)
+                    # Find the rightmost vertex
+                    if p[0] > x_max:
+                        x_max = p[0]
+                    # Find the leftmost vertex
+                    if p[0] < x_min:
+                        x_min = p[0]
+                    # Find the highest vertex
+                    if p[1] > y_max:
+                        y_max = p[1]
+                    # Find the lowest  vertex
+                    if p[1] < y_min:
+                        y_min = p[1]
+                labs.append(lab)
+                x_mins.append(x_min)
+                x_maxs.append(x_max)
+                y_mins.append(y_min)
+                y_maxs.append(y_max)
 
-location = transform.location
-rotation = transform.rotation
-print(location, rotation)
-# Set the spectator with an empty transform
-#spectator.set_transform(carla.Transform())
-spawn_points = world.get_map().get_spawn_points()
-spawn_0 = spawn_points[0]
-
-# Move to spawn 0
-#spectator.set_transform(spawn_0)
 
 
-vehicle_blueprints = world.get_blueprint_library().filter('*vehicle*')
-my_vehicle = world.spawn_actor(random.choice(vehicle_blueprints), spawn_0)
-# # Create a transform to place the camera on top of the vehicle
-# camera_init_trans = carla.Transform(carla.Location(z=1.5))
-#
-# # We create the camera through a blueprint that defines its properties
-# camera_bp = world.get_blueprint_library().find('sensor.camera.rgb')
-#
-# # We spawn the camera and attach it to our ego vehicle
-# camera = world.spawn_actor(camera_bp, camera_init_trans, attach_to=ego_vehicle)
-# camera.listen(lambda image: image.save_to_disk('out/%06d.png' % image.frame))
 
-# Find the blueprint of the sensor.
-blueprint = world.get_blueprint_library().find('sensor.camera.rgb')
-# Modify the attributes of the blueprint to set image resolution and field of view.
-blueprint.set_attribute('image_size_x', '1920')
-blueprint.set_attribute('image_size_y', '1080')
-blueprint.set_attribute('fov', '110')
-# Set the time in seconds between sensor captures
-blueprint.set_attribute('sensor_tick', '1.0')
-transform = carla.Transform(carla.Location(x=0.8, z=1.7))
-sensor = world.spawn_actor(blueprint, transform, attach_to=my_vehicle)
-sensor.listen()
+                cv2.line(img, (int(x_min),int(y_min)), (int(x_max),int(y_min)), (0,0,255, 255), 1)
+                cv2.line(img, (int(x_min),int(y_max)), (int(x_max),int(y_max)), (0,0,255, 255), 1)
+                cv2.line(img, (int(x_min),int(y_min)), (int(x_min),int(y_max)), (0,0,255, 255), 1)
+                cv2.line(img, (int(x_max),int(y_min)), (int(x_max),int(y_max)), (0,0,255, 255), 1)
+cv2.imwrite("out/test.png", img)
