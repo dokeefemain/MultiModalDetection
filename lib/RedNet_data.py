@@ -202,6 +202,7 @@ class RandomScale(object):
         label = skimage.transform.resize(label, (target_height, target_width),
                                          order=0, mode='reflect', preserve_range=True)
 
+
         return {'image': image, 'depth': depth, 'label': label}
 
 
@@ -255,6 +256,7 @@ class ToTensor(object):
         image, depth, label = sample['image'], sample['depth'], sample['label']
 
         # Generate different label scales
+        label = label
         label2 = skimage.transform.resize(label, (label.shape[0] // 2, label.shape[1] // 2),
                                           order=0, mode='reflect', preserve_range=True)
         label3 = skimage.transform.resize(label, (label.shape[0] // 4, label.shape[1] // 4),
