@@ -10,6 +10,7 @@ import torchvision.transforms as transforms
 from torchvision.utils import make_grid
 from torch import nn
 from PIL import Image
+from tqdm import tqdm
 
 from tensorboardX import SummaryWriter
 
@@ -21,12 +22,15 @@ from lib.utils.utils import save_ckpt
 from lib.utils.utils import print_log
 import imageio
 from torch.optim.lr_scheduler import LambdaLR
-
-device = torch.device("cuda:0")
+def warn(*args, **kwargs):
+    pass
+import warnings
+warnings.warn = warn
+device = torch.device("cuda")
 image_w = 640
 image_h = 480
-batch_size = 5
-workers = 0
+batch_size = 8
+workers = 4
 lr = 2e-3
 lr_decay = 0.8
 epoch_per_decay = 100
@@ -36,17 +40,17 @@ epochs = 1500
 start_epoch = 0
 save_epoch_freq = 5
 print_freq = 50
-summary_dir = 'lib/models/model1/summary'
-ckpt_dir = 'lib/models/model1/'
+summary_dir = 'lib/models/model2/summary'
+ckpt_dir = 'lib/models/model2/'
 checkpoint = False
 
 class CARLA(Dataset):
     def __init__(self, transform=None, phase_train=True):
         self.phase_train = phase_train
         self.transform = transform
-        tmp = pd.read_csv("data/run1/train.csv")
+        tmp = pd.read_csv("data/run2/train.csv")
         self.train_files = tmp["Name"]
-        tmp = pd.read_csv("data/run1/test.csv")
+        tmp = pd.read_csv("data/run2/test.csv")
         self.test_files = tmp["Name"]
 
     def __len__(self):
@@ -79,8 +83,7 @@ train_data = CARLA(transform=transforms.Compose([RedNet_data.scaleNorm(),
                                                  RedNet_data.ToTensor(),
                                                  RedNet_data.Normalize()]),
                    phase_train=True)
-train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True,
-                              num_workers=workers, pin_memory=False)
+train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True,num_workers=workers, pin_memory=True, drop_last=False)
 num_train = len(train_data)
 model = RedNet_model.RedNet(pretrained=False)
 CEL_weighted = utils.CrossEntropyLoss2d()
@@ -95,49 +98,35 @@ scheduler = LambdaLR(optimizer, lr_lambda=lr_decay_lambda)
 
 writer = SummaryWriter(summary_dir)
 
-for epoch in range(int(start_epoch), epochs):
+def train_fn(train_loader, model, optimizer, loss_fn):
+    loop = tqdm(train_loader, leave=True)
+    losses = []
+    device = "cuda"
+    for batch_idx, sample in enumerate(loop):
+        image = sample['image'].to(device)
+        depth = sample['depth'].to(device)
+        target_scales = [sample[s].to(device) for s in ['label', 'label2', 'label3', 'label4', 'label5']]
+        optimizer.zero_grad()
+        pred_scales = model(image, depth, checkpoint)
+        loss = loss_fn(pred_scales, target_scales)
+        
+        losses.append(loss.item())
+        loss.backward()
+        optimizer.step()
+        mean_loss = sum(losses) / len(losses)
+        loop.set_postfix(loss=mean_loss)
+        
 
+for epoch in range(int(start_epoch), epochs):
     scheduler.step(epoch)
+    print("Epoch "+str(epoch))
     local_count = 0
     last_count = 0
     end_time = time.time()
     if epoch % save_epoch_freq == 0 and epoch != start_epoch:
         save_ckpt( ckpt_dir, model, optimizer, global_step, epoch,
                   local_count, num_train)
-
-    for batch_idx, sample in enumerate(train_loader):
-        image = sample['image'].to(device)
-        depth = sample['depth'].to(device)
-        target_scales = [sample[s].to(device) for s in ['label', 'label2', 'label3', 'label4', 'label5']]
-        optimizer.zero_grad()
-        pred_scales = model(image, depth, checkpoint)
-        loss = CEL_weighted(pred_scales, target_scales)
-        loss.backward()
-        optimizer.step()
-        local_count += image.data.shape[0]
-        global_step += 1
-        if global_step % print_freq == 0 or global_step == 1:
-
-            time_inter = time.time() - end_time
-            count_inter = local_count - last_count
-            print_log(global_step, epoch, local_count, count_inter,
-                      num_train, loss, time_inter)
-            end_time = time.time()
-
-            for name, param in model.named_parameters():
-                writer.add_histogram(name, param.clone().cpu().data.numpy(), global_step, bins='doane')
-            grid_image = make_grid(image[:3].clone().cpu().data, 3, normalize=True)
-            writer.add_image('image', grid_image, global_step)
-            grid_image = make_grid(depth[:3].clone().cpu().data, 3, normalize=True)
-            writer.add_image('depth', grid_image, global_step)
-            grid_image = make_grid(utils.color_label(torch.max(pred_scales[0][:3], 1)[1] + 1), 3, normalize=False,
-                                   range=(0, 255))
-            writer.add_image('Predicted label', grid_image, global_step)
-            grid_image = make_grid(utils.color_label(target_scales[0][:3]), 3, normalize=False, range=(0, 255))
-            writer.add_image('Groundtruth label', grid_image, global_step)
-            writer.add_scalar('CrossEntropyLoss', loss.data, global_step=global_step)
-            writer.add_scalar('Learning rate', scheduler.get_lr()[0], global_step=global_step)
-            last_count = local_count
+    train_fn(train_loader, model, optimizer, CEL_weighted)
 
 save_ckpt(ckpt_dir, model, optimizer, global_step, epochs,
           0, num_train)
