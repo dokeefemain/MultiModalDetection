@@ -7,7 +7,7 @@ from torch.utils.checkpoint import checkpoint
 
 
 class RedNet(nn.Module):
-    def __init__(self, num_classes=3, pretrained=False):
+    def __init__(self, num_classes=4, pretrained=False):
 
         super(RedNet, self).__init__()
         block = Bottleneck

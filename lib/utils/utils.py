@@ -3,7 +3,8 @@ from torch import nn
 import torch
 import os
 
-med_frq = [1.0198377592178856, 687.0101010104336, 1416.9583333333321]
+import math
+med_frq = [1.0762500756738334, 14.394745917740037, 9696.969696974398, 19999.999999999996]
 
 model_urls = {
     'resnet18': 'https://download.pytorch.org/models/resnet18-5c106cde.pth',
@@ -25,8 +26,7 @@ class CrossEntropyLoss2d(nn.Module):
     def forward(self, inputs_scales, targets_scales):
         losses = []
         for inputs, targets in zip(inputs_scales, targets_scales):
-            mask = targets > 0
-            #print(np.unique(mask.cpu().detach().numpy()))
+            mask = targets >= 0
             targets_m = targets.clone()
             #targets_m[mask] -= 1
             loss_all = self.ce_loss(inputs, targets_m.long())
