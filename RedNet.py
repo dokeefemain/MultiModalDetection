@@ -115,6 +115,9 @@ class CARLA(Dataset):
         else:
             files = self.test_files
         label = np.load("data/run2/semantic/" + files[idx] + ".npy")
+        remove = np.load("lib/remove_car.npy")
+        label[remove == 1] = 0
+
         depth = np.load("data/run2/depth/" + files[idx] + ".npy")
         image = imageio.v2.imread("data/run2/rgb/" + files[idx] + ".png", pilmode='RGB')
         sample = {'image':image, 'depth': depth, 'label':label}
